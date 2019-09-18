@@ -4,6 +4,7 @@
 #include <fstream>		//For File I/O
 #include <vector>
 #include <iomanip>
+#include <time.h>
 using namespace std;
 
 
@@ -190,6 +191,85 @@ void LRU_replacement(vector<vector<block_struct>> &cache, vector<int> &set_full,
 	
 }
 
+//=================================================================================================================================
+//======================================****  Random Replacement Policy Function   ****===============================================
+//=================================================================================================================================
+void random_replacement(vector<vector<block_struct>> &cache, vector<int> &set_full, int assoc, int set_size, address_in &input_address,
+					cache_stats_struct &cache_struct){
+	
+	// Use current time as seed for random generator 
+    srand(time(0));
+	int random_block_to_replace = (rand()%assoc);
+	
+	int Cache_Hit = 0;
+	//Cache Checking in case of Read
+	if(input_address.repl_in=='r' || input_address.repl_in == 'w'){
+		
+		cache_struct.number_of_mem_access++;
+		if(input_address.repl_in =='r'){
+			cache_struct.number_of_read_access++;	
+		} else if (input_address.repl_in == 'w'){
+			cache_struct.number_of_write_access++;
+		}
+		
+		//======================================================
+		//Check for a Cache Hit in a Set
+		//======================================================
+		for (int i=0; i<assoc; i++){
+			if (cache[input_address.addr_index][i].valid_bit == 1 && cache[input_address.addr_index][i].tag_bits == input_address.addr_tag){
+				//cout<<"Cache Hit Way Number: "<< i <<"\n";
+				Cache_Hit = 1;	
+				break;
+			}
+		}	
+		
+		//======================================================
+		//Functionality for Cache Miss
+		//======================================================
+		if (Cache_Hit==0){
+			
+			cache_struct.number_of_misses++;
+			if(input_address.repl_in =='r'){
+				cache_struct.number_of_read_misses++;	
+			} else if (input_address.repl_in == 'w'){
+				cache_struct.number_of_write_misses++;
+			}
+			
+			//======================================================
+			//if set is not full, find an empty location and fill it
+			//======================================================
+			if (set_full[input_address.addr_index] < assoc){
+				for (int i=0; i<assoc; i++){
+					if (cache[input_address.addr_index][i].valid_bit == 0){
+						cache[input_address.addr_index][i].valid_bit 	= 1;
+						cache[input_address.addr_index][i].tag_bits  	= input_address.addr_tag;
+						break;
+					}
+				}	
+				set_full[input_address.addr_index]++;
+			} 
+			
+			//======================================================
+			//if set is full then replace with Random policy
+			//======================================================			
+			else{
+				int temp_index = random_block_to_replace;
+				
+				cache[input_address.addr_index][temp_index].valid_bit 		= 1;
+                cache[input_address.addr_index][temp_index].tag_bits  		= input_address.addr_tag;
+			}
+			
+		}
+		
+	} 
+	//Neither of Read or Write command
+	else{
+		cerr<<"Invalid command from File"<<"\n";
+	}
+	
+}
+
+
 int main(int argc, char *argv[]){
 	int nk = stoi(argv[1],nullptr,10);			//Cache size in KB
 	int assoc = stoi(argv[2],nullptr,10);		//Set associativity of Cache = Number of ways = Number of blocks in a Set
@@ -250,7 +330,12 @@ int main(int argc, char *argv[]){
 		//============================================================================
         //Call Cache Update/Replacement Function for each Address Input
         //============================================================================
-		LRU_replacement(cache, set_full, assoc, set_size, input_address, cache_statistics);
+		if (repl == 'l'){
+			LRU_replacement(cache, set_full, assoc, set_size, input_address, cache_statistics);
+		}
+		else if (repl == 'r'){
+			random_replacement(cache, set_full, assoc, set_size, input_address, cache_statistics);
+		}
 		
 	}
 	
