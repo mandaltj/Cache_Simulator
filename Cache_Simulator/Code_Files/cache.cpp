@@ -52,7 +52,7 @@ void print_array(int arr[], int size){
 //Debug function to print Cache to a Text file
 void display_cache(vector<vector<block_struct>> &cache, int set_size, int assoc){
 	ofstream outFile;
-	outFile.open("Cache_display.txt");
+	outFile.open("Results/Cache_display.txt");
 	
 	for (int i=0; i<set_size; i++){
 		outFile<<"Set"<<i<<": ";
@@ -197,7 +197,7 @@ int main(int argc, char *argv[]){
 	char repl = *argv[4];						//Cache Replacement policy
 	
 	
-	int set_size = ((nk/assoc)*1024)/blocksize;	//Number of blocks in a way = Index bits
+	int set_size = ((nk*1024)/assoc)/blocksize;	//Number of blocks in a way = Index bits
 	int index_bit_size = log2(set_size); 
 	int block_offset_bit_size = log2(blocksize);
 	int tag_bit_size = (64-index_bit_size-block_offset_bit_size); 
