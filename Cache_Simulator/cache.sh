@@ -16,6 +16,8 @@ rm -rf Executables/cache
 rm -rf Results/SpecBenchmark_cache_results.txt
 g++ -o Executables/cache Code_Files/cache.cpp
 
+#This is a custom trace file to test reads and replaccement. Can be used for manual analysis along with print debug functions
+#gzip -dc Test_Files/trace_test.txt.gz | ./Executables/cache_Tree_PLRU $CACHE_SIZE $SET_ASSOCIATIVITY $BLOCK_SIZE $REPLACEMENT_POLICY
 
 gzip -dc Test_Files/400.perlbench-41B.trace.txt.gz             | ./Executables/cache $CACHE_SIZE $SET_ASSOCIATIVITY $BLOCK_SIZE $REPLACEMENT_POLICY
 gzip -dc Test_Files/401.bzip2-226B.trace.txt.gz                | ./Executables/cache $CACHE_SIZE $SET_ASSOCIATIVITY $BLOCK_SIZE $REPLACEMENT_POLICY
