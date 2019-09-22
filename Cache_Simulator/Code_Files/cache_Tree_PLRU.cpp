@@ -5,6 +5,7 @@
 #include <vector>
 #include <iomanip>
 #include <time.h>
+#include <queue>
 using namespace std;
 
 
@@ -64,24 +65,74 @@ binary_tree_node* binary_newNode(int data, int way_sel){
 }
 
 //Function to link a binary tree structure for a particular set
-binary_tree_node* link_binary_tree_to_SET(binary_tree_node* root, int assoc, int start, int end){
+binary_tree_node* link_binary_tree_to_SET(binary_tree_node* root, int start, int end){
 	
 	int mid = (start+end+1)/2;
 	
-	if(assoc>0){	
+	if(start<end){	
 		binary_tree_node* temp = binary_newNode(0, 0);
 		root = temp;
 		
 		//insert left child
-		root->left 	= link_binary_tree_to_SET(root->left, assoc/2, start, mid-1);
+		root->left 	= link_binary_tree_to_SET(root->left, start, mid-1);
 		//insert right child
-		root->right = link_binary_tree_to_SET(root->right, assoc/2, mid, end);
-	
-		if (assoc == 1){
-			root->way_sel = start;	
-		}
+		root->right = link_binary_tree_to_SET(root->right, mid, end);
+	}
+	else if (start==end)
+	{
+		binary_tree_node* temp = binary_newNode(0, 0);
+		root = temp;
+		
+		//This is leaf node. Assign way index
+		root->way_sel = start;	
 	}	
 	return root;
+}
+
+void binary_tree_update(binary_tree_node* root, int way_update_index, int start, int end){
+	
+	int mid = (start+end+1)/2;
+	
+	if(start<end){
+		if(way_update_index>= mid){	
+			//cout<<"going right\n";
+			root->node_val=1;
+			
+			//traverse right
+			binary_tree_update(root->right, way_update_index, mid, end);
+		}
+		else
+		{
+			//cout<<"going left\n";	
+			root->node_val=0;	
+			
+			//traverse left
+			binary_tree_update(root->left, way_update_index, start, mid-1);
+		}		
+	}
+	return;
+		
+}
+
+int TPLRU_replacement(binary_tree_node* root, int start, int end){
+	
+	int mid = (start+end+1)/2;
+	
+	if(start<end){
+		if(root->node_val==0){
+			//cout<<"Should Go right\n";
+			int way_replacement_index = TPLRU_replacement(root->right, start, mid-1);		
+			return way_replacement_index; 
+		}
+		else{
+			//cout<<"Should Go left\n";
+			int way_replacement_index = TPLRU_replacement(root->left, mid, end);
+			return way_replacement_index;
+		}
+	}
+	//This line will only execute on leaf node when start==end
+	//For all other nodes the return call inside if-else will execute
+	return root->way_sel;
 }
 
 //=================================================================================================================================
@@ -93,6 +144,40 @@ void print_array(int arr[], int size){
 		cout<<i<<": "<<arr[i]<<"\n";
 	}
 }
+
+// Function to print tree nodes in InOrder fashion 
+void printLevelOrder(binary_tree_node *root) 
+{ 
+    // Base Case 
+    if (root == NULL)  return; 
+  
+    // Create an empty queue for level order tarversal 
+    queue<binary_tree_node *> q; 
+  
+    // Enqueue Root and initialize height 
+    q.push(root); 
+  
+    while (q.empty() == false) 
+    { 
+        // Print front of queue and remove it from queue 
+        binary_tree_node *node = q.front(); 
+        if (node->left==NULL && node->right==NULL){
+			cout << node->way_sel << " ";
+		}
+		else{
+			cout << node->node_val << " "; 
+		}
+        q.pop(); 
+  
+        /* Enqueue left child */
+        if (node->left != NULL) 
+            q.push(node->left); 
+  
+        /*Enqueue right child */
+        if (node->right != NULL) 
+            q.push(node->right); 
+    } 
+} 
 
 //Debug function to print Cache to a Text file
 void display_cache(vector<vector<block_struct>> &cache, int set_size, int assoc){
@@ -155,31 +240,13 @@ void extract_cache_param(address_in &input_address, int index_bit_size, int bloc
 //======================================****  LRU Replacement Policy Function   ****===============================================
 //=================================================================================================================================
 
-
-//void Tree_PLRU_block_replace(vector<vector<block_struct>> &cache, binary_tree_node *root, int set_index){
-//	if(root->data = 0){
-//		
-//	}
-//	else {
-//		
-//	}	
-//}  
-
 void Tree_PLRU_replacement(vector<vector<block_struct>> &cache, vector<int> &set_full, int assoc, int set_size, address_in &input_address,
-					cache_stats_struct &cache_struct){
+					cache_stats_struct &cache_struct, binary_tree_node* bt_ptr[]){
 	
-	//Update the LRU_tracking by +1 for all the elements that are valid in a set
-	//This way, for every access in a set, the elements which are not accessed keep getting old
-	//and then they will be replaced based in LRU policy
-	for (int i=0; i<assoc; i++){
-		if (cache[input_address.addr_index][i].valid_bit == 1){
-			//cache[input_address.addr_index][i].LRU_tracking += 1;
-		}
-	}
-	
-	
+	//Initialize a parameter to track Hit/Miss
 	int Cache_Hit = 0;
-	//Cache Checking in case of Read
+	
+	//Cache Checking in case of Read/Write
 	if(input_address.repl_in=='r' || input_address.repl_in == 'w'){
 		cache_struct.number_of_mem_access++;
 		if(input_address.repl_in =='r'){
@@ -195,10 +262,18 @@ void Tree_PLRU_replacement(vector<vector<block_struct>> &cache, vector<int> &set
 			if (cache[input_address.addr_index][i].valid_bit == 1 && cache[input_address.addr_index][i].tag_bits == input_address.addr_tag){
 				//cout<<"Cache Hit Way Number: "<< i <<"\n";
 				Cache_Hit = 1;	
-				//cache[input_address.addr_index][i].LRU_tracking = 0;
+				//Update the BT for tracking most recently used
+				binary_tree_update(bt_ptr[input_address.addr_index], i, 0, assoc-1);
 				break;
 			}
 		}	
+		
+		//Debug Prints
+		//if(Cache_Hit==0){
+		//	cout<<"Cache Miss"<<"\n";
+		//}else{
+		//	cout<<"Cache Hit"<<"\n";
+		//}
 		
 		//======================================================
 		//Functionality for Cache Miss
@@ -220,7 +295,8 @@ void Tree_PLRU_replacement(vector<vector<block_struct>> &cache, vector<int> &set
 					if (cache[input_address.addr_index][i].valid_bit == 0){
 						cache[input_address.addr_index][i].valid_bit 	= 1;
 						cache[input_address.addr_index][i].tag_bits  	= input_address.addr_tag;
-						//cache[input_address.addr_index][i].LRU_tracking = 0;
+						binary_tree_update(bt_ptr[input_address.addr_index], i, 0, assoc-1);
+						//cout<<"Updating Index in Set: "<<i<<"\n";
 						break;
 					}
 				}	
@@ -231,19 +307,11 @@ void Tree_PLRU_replacement(vector<vector<block_struct>> &cache, vector<int> &set
 			//if set is full then replace with LRU policy
 			//======================================================			
 			else{
-				//unsigned long long int temp = cache[input_address.addr_index][0].LRU_tracking;
-				int temp_index = 0;
-				//for (int i=1; i<assoc; i++){
-				//	if(cache[input_address.addr_index][i].LRU_tracking>temp){
-				//		//temp 		= cache[input_address.addr_index][i].LRU_tracking; 	
-				//		temp_index 	= i; 	
-				//	}
-				//}
-				
-				
-				cache[input_address.addr_index][temp_index].valid_bit 		= 1;
-                cache[input_address.addr_index][temp_index].tag_bits  		= input_address.addr_tag;
-                //cache[input_address.addr_index][temp_index].LRU_tracking	= 0;
+				int replacement_index = TPLRU_replacement(bt_ptr[input_address.addr_index], 0, assoc-1);
+				//cout<<"Replaced Way Number: "<<replacement_index<<"\n";
+				cache[input_address.addr_index][replacement_index].valid_bit 		= 1;
+                cache[input_address.addr_index][replacement_index].tag_bits  		= input_address.addr_tag;
+				binary_tree_update(bt_ptr[input_address.addr_index], replacement_index, 0, assoc-1);
 			}
 			
 		}
@@ -253,6 +321,9 @@ void Tree_PLRU_replacement(vector<vector<block_struct>> &cache, vector<int> &set
 	else{
 		cerr<<"Invalid command from File"<<"\n";
 	}
+	
+
+	//printLevelOrder(bt_ptr[input_address.addr_index]);
 	
 }
 
@@ -269,7 +340,7 @@ int main(int argc, char *argv[]){
 	int tag_bit_size = (64-index_bit_size-block_offset_bit_size); 
 	
 	
-	display_cache_info(nk, assoc, blocksize, set_size, repl, tag_bit_size, index_bit_size, block_offset_bit_size);
+	//display_cache_info(nk, assoc, blocksize, set_size, repl, tag_bit_size, index_bit_size, block_offset_bit_size);
 	
 	
 	//==================================================================
@@ -297,14 +368,8 @@ int main(int argc, char *argv[]){
 	//================================================
 	binary_tree_node *bt_ptr [set_size];
 	for (int i=0; i<set_size; i++){
-		bt_ptr[i] = link_binary_tree_to_SET(bt_ptr[i], assoc, 0, assoc-1);
+		bt_ptr[i] = link_binary_tree_to_SET(bt_ptr[i], 0, assoc-1);
 	}
-	
-	//binary_tree_node* bt_ptr = link_binary_tree_to_SET(bt_ptr, assoc, 0, assoc-1);
-	
-	//print_binary_tree(bt_ptr[0]);
-	//
-	//cout<<"Debug Point\n";
 	
 	//===============================================================================================================================
 	//**********************************    FIle Read and Cache Hit/Miss Processing    **********************************************
@@ -313,41 +378,42 @@ int main(int argc, char *argv[]){
 	//================================================
 	//Define the input address structure 
 	//================================================
-	//address_in input_address;
-	//
-	//
-	//while(cin>>input_address.repl_in>>input_address.address){
-	//	
-	//	input_address.address_hex = stoull(input_address.address, nullptr, 16);	//Convert the input address character in hex to integer		
-	//	
-	//	//============================================================================
-	//	//Extract Address Tag, Index from the Address Input
-	//	//============================================================================
-	//	extract_cache_param(input_address, index_bit_size, block_offset_bit_size);
-	//	//cout<<"Address Index: "<<input_address.addr_index<<"\n";
-	//	//cout<<"Address Tag: "<<input_address.addr_tag<<"\n";
-	//
-	//	//============================================================================
-    //    //Call Cache Update/Replacement Function for each Address Input
-    //    //============================================================================
-	//	//Tree_PLRU_replacement(cache, set_full, assoc, set_size, input_address, cache_statistics);
-	//	
-	//}
-	//
-	////display_cache(cache, set_size, assoc);
-	//
-	//double total_miss_percent 		= ((cache_statistics.number_of_misses/cache_statistics.number_of_mem_access)*100);
-	//double total_read_miss_percent 	= ((cache_statistics.number_of_read_misses/cache_statistics.number_of_read_access)*100);
-	//double total_write_miss_percent = ((cache_statistics.number_of_write_misses/cache_statistics.number_of_write_access)*100);
-	//
-	//cout<<cache_statistics.number_of_misses<<" "<<fixed<<setprecision(6)<<total_miss_percent<<"% "<<setprecision(0);
-	//cout<<cache_statistics.number_of_read_misses<<" "<<fixed<<setprecision(6)<<total_read_miss_percent<<"% "<<setprecision(0);
-	//cout<<cache_statistics.number_of_write_misses<<" "<<fixed<<setprecision(6)<<total_write_miss_percent<<"%"<<setprecision(0)<<"\n";
-	//
-	//ofstream outFile;
-	//outFile.open("Results/SpecBenchmark_cache_results.txt", ios::app);
-	//outFile<<cache_statistics.number_of_misses<<" "<<fixed<<setprecision(6)<<total_miss_percent<<"% "<<setprecision(0)<<cache_statistics.number_of_read_misses<<" "<<fixed<<setprecision(6)<<total_read_miss_percent<<"% "<<setprecision(0)<<cache_statistics.number_of_write_misses<<" "<<fixed<<setprecision(6)<<total_write_miss_percent<<"%"<<setprecision(0)<<"\n";
-	//outFile.close();
+	address_in input_address;
+	
+	
+	while(cin>>input_address.repl_in>>input_address.address){
+		
+		input_address.address_hex = stoull(input_address.address, nullptr, 16);	//Convert the input address character in hex to integer		
+		
+		//============================================================================
+		//Extract Address Tag, Index from the Address Input
+		//============================================================================
+		extract_cache_param(input_address, index_bit_size, block_offset_bit_size);
+		//cout<<"Address Index: "<<input_address.addr_index<<"\n";
+		//cout<<"Address Tag: "<<input_address.addr_tag<<"\n";
+		
+		//============================================================================
+        //Call Cache Update/Replacement Function for each Address Input
+        //============================================================================
+		Tree_PLRU_replacement(cache, set_full, assoc, set_size, input_address, cache_statistics, bt_ptr);
+		
+		//cout<<"\n\n";
+	}
+	
+	//display_cache(cache, set_size, assoc);
+	
+	double total_miss_percent 		= ((cache_statistics.number_of_misses/cache_statistics.number_of_mem_access)*100);
+	double total_read_miss_percent 	= ((cache_statistics.number_of_read_misses/cache_statistics.number_of_read_access)*100);
+	double total_write_miss_percent = ((cache_statistics.number_of_write_misses/cache_statistics.number_of_write_access)*100);
+	
+	cout<<cache_statistics.number_of_misses<<" "<<fixed<<setprecision(6)<<total_miss_percent<<"% "<<setprecision(0);
+	cout<<cache_statistics.number_of_read_misses<<" "<<fixed<<setprecision(6)<<total_read_miss_percent<<"% "<<setprecision(0);
+	cout<<cache_statistics.number_of_write_misses<<" "<<fixed<<setprecision(6)<<total_write_miss_percent<<"%"<<setprecision(0)<<"\n";
+	
+	ofstream outFile;
+	outFile.open("Results/SpecBenchmark_Tree_PLRU_cache_results.txt", ios::app);
+	outFile<<cache_statistics.number_of_misses<<" "<<fixed<<setprecision(6)<<total_miss_percent<<"% "<<setprecision(0)<<cache_statistics.number_of_read_misses<<" "<<fixed<<setprecision(6)<<total_read_miss_percent<<"% "<<setprecision(0)<<cache_statistics.number_of_write_misses<<" "<<fixed<<setprecision(6)<<total_write_miss_percent<<"%"<<setprecision(0)<<"\n";
+	outFile.close();
 	
 	return 0;
 }
